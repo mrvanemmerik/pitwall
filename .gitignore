@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/
+.cursor/
+.kiro/
+*.zip
+.env
+scripts/ship.local.env
+scripts/amplify-headers.local.yml

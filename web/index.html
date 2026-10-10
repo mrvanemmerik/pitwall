@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pit Wall</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23d97757' d='M24 2l3.2 14.1L38.6 7.4l-6.2 12.4L46 24l-13.6 4.2 6.2 12.4-11.4-8.7L24 46l-3.2-14.1-11.4 8.7 6.2-12.4L2 24l13.6-4.2L9.4 7.4l11.4 8.7z'/%3E%3C/svg%3E" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="masthead">
+          <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true" fill="currentColor"><path d="M24 2l3.2 14.1L38.6 7.4l-6.2 12.4L46 24l-13.6 4.2 6.2 12.4-11.4-8.7L24 46l-3.2-14.1-11.4 8.7 6.2-12.4L2 24l13.6-4.2L9.4 7.4l11.4 8.7z"/><line class="a " x1="495" y1="486" x2="430" y2="520" marker-end="url(#ah)"/></svg>
+          <h1>Pit Wall</h1>
+        </div>
+        <p class="lede">2026 Formula 1 standings, teams, the calendar and results, plus a Claude strategist on the radio. Ask a question and Claude answers from the season, and searches the web when the board is not enough.</p>
+        <span class="powered"><svg viewBox="0 0 48 48" aria-hidden="true" fill="currentColor"><path d="M24 2l3.2 14.1L38.6 7.4l-6.2 12.4L46 24l-13.6 4.2 6.2 12.4-11.4-8.7L24 46l-3.2-14.1-11.4 8.7 6.2-12.4L2 24l13.6-4.2L9.4 7.4l11.4 8.7z"/></svg><span>Questions answered by <b>Claude</b></span></span>
+      </header>
+      <nav class="tabs" role="tablist" aria-label="Garage pages">
+        <button type="button" role="tab" id="tab-board" data-tab="board" aria-selected="true" aria-controls="board">Board</button>
+        <button type="button" role="tab" id="tab-how" data-tab="how" aria-selected="false" aria-controls="how" tabindex="-1">How it works</button>
+      </nav>
+      <div id="sheet">
+        <div id="board" role="tabpanel" aria-labelledby="tab-board" aria-live="polite">
+          <p class="stamp">Loading the garage board…</p>
+        </div>
+        <section id="ask" class="pin" aria-label="Ask the garage">
+          <p class="kicker"><svg viewBox="0 0 48 48" aria-hidden="true" fill="currentColor"><path d="M24 2l3.2 14.1L38.6 7.4l-6.2 12.4L46 24l-13.6 4.2 6.2 12.4-11.4-8.7L24 46l-3.2-14.1-11.4 8.7 6.2-12.4L2 24l13.6-4.2L9.4 7.4l11.4 8.7z"/></svg><span>Ask the pit wall <span id="who"></span></span></p>
+          <div id="ask-out">
+            <p>Claude answers from the stored season, and can search the web and read pages when the board does not have it. Chat is invite-only for now, with thirty questions a day.</p>
+            <button type="button" id="sign-in">Sign in with Google</button>
+            <p id="ask-note" class="fine" role="status"></p>
+          </div>
+          <div id="access" hidden>
+            <p id="access-text"></p>
+            <div class="ask-actions">
+              <button type="button" id="access-request" hidden>Request access</button>
+              <button type="button" id="access-signout">Sign out</button>
+            </div>
+          </div>
+          <form id="ask-form" hidden>
+            <div id="thread" aria-live="polite"></div>
+            <label for="question">Question</label>
+            <input id="question" name="question" maxlength="400" autocomplete="off" required />
+            <div class="ask-actions">
+              <button type="submit" id="ask-send">Ask</button>
+              <button type="button" id="new-chat" hidden>New chat</button>
+              <button type="button" id="sign-out">Sign out</button>
+              <span id="quota" class="fine" role="status"></span>
+            </div>
+          </form>
+          <div id="admin" hidden>
+            <p class="kicker">Access requests</p>
+            <ul id="admin-list"></ul>
+            <form id="admin-add">
+              <label for="admin-email">Add an email</label>
+              <div class="ask-actions">
+                <input id="admin-email" type="email" maxlength="254" autocomplete="off" placeholder="name@example.com" required />
+                <button type="submit">Approve</button>
+              </div>
+            </form>
+            <p id="admin-note" class="fine" role="status"></p>
+          </div>
+        </section>
+      </div>
+      <section id="how" role="tabpanel" aria-labelledby="tab-how" hidden>
+        <p class="stamp">The board reads a stored copy, refreshed on Monday morning and again on Saturday and Sunday evenings. It does not call the race feed itself. Questions go to Claude, not the race feed.</p>
+        <ol class="flow">
+          <li>
+            <span class="kicker">Source</span>
+            <strong>Jolpica</strong>
+            <p>The 2026 standings, the 23-race calendar, grand prix results, and sprint results. No key.</p>
+          </li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li>
+            <span class="kicker">Monday morning</span>
+            <strong>Ingest</strong>
+            <p>A scheduled function pages the results, keeps the top 10, and writes one transaction. A failed fetch writes nothing. When qualifying or a race is new, Claude writes a short recap from those results.</p>
+          </li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li>
+            <span class="kicker">Five notes</span>
+            <strong>Database</strong>
+            <ul class="slips">
+              <li>Drivers</li>
+              <li>Teams</li>
+              <li>Schedule</li>
+              <li>Results</li>
+              <li>Updated time</li>
+            </ul>
+          </li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li>
+            <span class="kicker">When you open it</span>
+            <strong>This page</strong>
+            <p>The files sit on Amplify. The board then asks <span class="mono">GET /season</span> and draws the copy.</p>
+          </li>
+        </ol>
+        <p class="kicker">When you ask the pit wall</p>
+        <ol class="flow">
+          <li>
+            <span class="kicker">You</span>
+            <strong>Sign in</strong>
+            <p>Google sign-in through Amazon Cognito. The page keeps a short-lived token and sends it with each question.</p>
+          </li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li>
+            <span class="kicker">Checks</span>
+            <strong>Ask function</strong>
+            <p>Verifies the token and counts the question against a limit of thirty a day. A question that fails is handed back.</p>
+          </li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li>
+            <span class="kicker">Context</span>
+            <strong>Season + web</strong>
+            <p>The stored season goes with every question, plus the official results page or recent headlines when the question is about a result or the news. Claude can also search the web and open pages itself when that is not enough.</p>
+          </li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li>
+            <span class="kicker">Answer</span>
+            <strong>Claude</strong>
+            <p>Claude Sonnet 5.5 answers from that context. It remembers your last few exchanges in the chat, and AgentCore Memory keeps your name, favorite driver and a summary of past chats between visits.</p>
+          </li>
+        </ol>
+        <section class="note arch-note">
+          <h2>The AWS resources</h2>
+          <p class="fine">Everything runs in one AWS region. Solid arrows are the live path, including AgentCore Memory, which remembers each signed-in fan. The dashed box is the old AgentCore harness setup: it still exists, but nothing calls it any more.</p>
+          <div class="arch"><svg viewBox="0 0 1080 750" role="img" aria-labelledby="arch-t arch-d"><title id="arch-t">AWS resources behind Pit Wall</title><desc id="arch-d">A visitor loads the site from Amplify, reads the season through API Gateway and a read Lambda from DynamoDB, and asks questions through a function URL to an ask Lambda that checks limits in DynamoDB, checks the sign-in token issued by Cognito and who is approved, notifies the owner of access requests through SNS, reads an API key from Secrets Manager, and calls Claude. A weekly scheduler runs an ingest Lambda that refreshes DynamoDB from Jolpica. AgentCore Memory stores facts, preferences and chat summaries per signed-in fan. An old AgentCore harness and runtime remain, unused.</desc><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs><g class="b ext"><rect x="20" y="330" width="160" height="56" rx="10"/><text x="100.0" y="354" class="t1" style="font-size:13px">Browser</text><text x="100.0" y="371" class="t2">your visitor</text></g><g class="b "><rect x="230" y="30" width="160" height="56" rx="10"/><text x="310.0" y="54" class="t1" style="font-size:13px">EventBridge Scheduler</text><text x="310.0" y="71" class="t2">Mon, Sat and Sun runs</text></g><g class="b lam"><rect x="470" y="30" width="160" height="56" rx="10"/><text x="550.0" y="54" class="t1" style="font-size:13px">Lambda: ingest</text><text x="550.0" y="71" class="t2">refresh + Claude recaps</text></g><g class="b ext"><rect x="900" y="30" width="160" height="56" rx="10"/><text x="980.0" y="54" class="t1" style="font-size:13px">Jolpica API</text><text x="980.0" y="71" class="t2">race data (external)</text></g><g class="b data"><rect x="710" y="130" width="160" height="56" rx="10"/><text x="790.0" y="154" class="t1" style="font-size:13px">DynamoDB</text><text x="790.0" y="171" class="t2">season: 5 items</text></g><g class="b "><rect x="230" y="130" width="160" height="56" rx="10"/><text x="310.0" y="154" class="t1" style="font-size:13px">API Gateway</text><text x="310.0" y="171" class="t2">HTTP API: GET /season</text></g><g class="b lam"><rect x="470" y="130" width="160" height="56" rx="10"/><text x="550.0" y="154" class="t1" style="font-size:13px">Lambda: read</text><text x="550.0" y="171" class="t2">serves the season</text></g><g class="b "><rect x="230" y="230" width="160" height="56" rx="10"/><text x="310.0" y="254" class="t1" style="font-size:13px">Amplify Hosting</text><text x="310.0" y="271" class="t2">static site</text></g><g class="b "><rect x="230" y="330" width="160" height="56" rx="10"/><text x="310.0" y="354" class="t1" style="font-size:13px">Cognito</text><text x="310.0" y="371" class="t2">user pool, Google login</text></g><g class="b ext"><rect x="470" y="330" width="160" height="56" rx="10"/><text x="550.0" y="354" class="t1" style="font-size:13px">Google</text><text x="550.0" y="371" class="t2">sign-in (external)</text></g><g class="b "><rect x="230" y="430" width="160" height="56" rx="10"/><text x="310.0" y="454" class="t1" style="font-size:13px">Lambda function URL</text><text x="310.0" y="471" class="t2">public, token checked</text></g><g class="b lam"><rect x="470" y="430" width="160" height="56" rx="10"/><text x="550.0" y="454" class="t1" style="font-size:13px">Lambda: ask</text><text x="550.0" y="471" class="t2">limit, history, answer</text></g><g class="b data"><rect x="710" y="300" width="160" height="56" rx="10"/><text x="790.0" y="324" class="t1" style="font-size:13px">DynamoDB</text><text x="790.0" y="341" class="t2">daily count + chat</text></g><g class="b data"><rect x="710" y="520" width="160" height="56" rx="10"/><text x="790.0" y="544" class="t1" style="font-size:13px">Secrets Manager</text><text x="790.0" y="561" class="t2">API keys</text></g><g class="b ext"><rect x="900" y="350" width="160" height="56" rx="10"/><text x="980.0" y="374" class="t1" style="font-size:13px">Web sources</text><text x="980.0" y="391" class="t2">search + fetch (external)</text></g><g class="b ext"><rect x="900" y="430" width="160" height="56" rx="10"/><text x="980.0" y="454" class="t1" style="font-size:13px">Anthropic API</text><text x="980.0" y="471" class="t2">Claude Sonnet 5.5 (external)</text></g><rect class="grp" x="230" y="620" width="490" height="112" rx="14"/><text x="250" y="642" class="t3">Unused: the old AgentCore harness, no longer connected to the chat</text><g class="b "><rect x="290" y="520" width="160" height="56" rx="10"/><text x="370.0" y="544" class="t1" style="font-size:13px">SNS</text><text x="370.0" y="561" class="t2">emails the owner requests</text></g><g class="b data"><rect x="540" y="540" width="160" height="56" rx="10"/><text x="620.0" y="564" class="t1" style="font-size:13px">AgentCore Memory</text><text x="620.0" y="581" class="t2">facts, preferences, summaries</text></g><g class="b idle"><rect x="240" y="656" width="140" height="56" rx="10"/><text x="310.0" y="680" class="t1" style="font-size:12px">AgentCore Harness</text><text x="310.0" y="697" class="t2">Nova Lite, idle</text></g><g class="b idle"><rect x="400" y="656" width="140" height="56" rx="10"/><text x="470.0" y="680" class="t1" style="font-size:12px">AgentCore Runtime</text><text x="470.0" y="697" class="t2">hosts the harness, idle</text></g><g class="b idle"><rect x="560" y="656" width="140" height="56" rx="10"/><text x="630.0" y="680" class="t1" style="font-size:12px">Lambda: season</text><text x="630.0" y="697" class="t2">harness tool, idle</text></g><line class="a " x1="180" y1="358" x2="230" y2="258" marker-end="url(#ah)"/><line class="a " x1="180" y1="358" x2="230" y2="158" marker-end="url(#ah)"/><line class="a " x1="180" y1="358" x2="230" y2="358" marker-end="url(#ah)"/><line class="a " x1="180" y1="358" x2="230" y2="458" marker-end="url(#ah)"/><line class="a " x1="390" y1="58" x2="470" y2="58" marker-end="url(#ah)"/><line class="a " x1="630" y1="58" x2="900" y2="58" marker-end="url(#ah)"/><line class="a " x1="580" y1="86" x2="760" y2="130" marker-end="url(#ah)"/><line class="a " x1="390" y1="158" x2="470" y2="158" marker-end="url(#ah)"/><line class="a " x1="630" y1="158" x2="710" y2="158" marker-end="url(#ah)"/><line class="a " x1="390" y1="458" x2="470" y2="458" marker-end="url(#ah)"/><line class="a " x1="390" y1="358" x2="470" y2="358" marker-end="url(#ah)"/><line class="a " x1="620" y1="430" x2="760" y2="186" marker-end="url(#ah)"/><line class="a " x1="630" y1="444" x2="710" y2="356" marker-end="url(#ah)"/><line class="a " x1="630" y1="458" x2="900" y2="458" marker-end="url(#ah)"/><line class="a " x1="630" y1="444" x2="900" y2="384" marker-end="url(#ah)"/><line class="a " x1="600" y1="486" x2="740" y2="520" marker-end="url(#ah)"/><line class="a " x1="600" y1="486" x2="600" y2="540" marker-end="url(#ah)"/><line class="a " x1="360" y1="386" x2="472" y2="436" marker-end="url(#ah)"/><text x="482" y="410" class="t3">token check</text></svg></div>
+          <ul class="legend"><li><i class="k lam"></i>Lambda</li><li><i class="k data"></i>Data and keys</li><li><i class="k ext"></i>Outside AWS</li><li><i class="k idle"></i>Idle</li></ul>
+          <p class="fine">Each Lambda has its own IAM role and writes to CloudWatch Logs.</p>
+        </section>
+        <div class="sketch">
+          <p class="kicker">What the board is drawing</p>
+          <div class="mini">
+            <p class="stamp">Updated time, full width</p>
+            <p class="pin-mini">Next round, or Last round, with the start time in your time zone. Rounds are marked Ran once their results are in, or Results pending until then.</p>
+            <div class="mini-cols">
+              <p>Drivers<br /><span>points, wins, +N this round</span></p>
+              <p>Teams<br /><span>a color chip and the same counts</span></p>
+            </div>
+            <div class="mini-results">
+              <p>Latest race, open</p>
+              <div class="slip">Grand Prix slip, top 10</div>
+              <div class="slip">Sprint slip, only on a sprint weekend <i class="sticker">Sprint</i></div>
+              <p class="ran">Older rounds stay closed on one line each.</p>
+            </div>
+          </div>
+        </div>
+        <article class="note rules">
+          <h2>The rules on the wall</h2>
+          <ol>
+            <li>2026 only. One season, no switcher.</li>
+            <li>Top 10 finishers for the grand prix and for the sprint.</li>
+            <li>The stamp is the database write time, in UTC. That is the proof the latest refresh ran.</li>
+            <li>Points on the board are the stored totals. The +N line is this round’s grand prix plus sprint.</li>
+            <li>The board is public. Anyone can sign in with Google, but chat needs approval while this is a proof of concept: a request emails the site owner, who approves or denies it in an admin panel. Approved emails are saved in a list.</li>
+            <li>Claude answers from the stored season first. If the board does not have a fact, it should say so instead of guessing.</li>
+            <li>Recaps are written by Claude from the stored results only: one for each qualifying and one for each race, sprints included. Practice is not covered.</li>
+            <li>Answers can be wrong. Check the stamp for how fresh the standings are.</li>
+            <li>Pit Wall remembers what you tell it, such as your name and favorite driver, tied to your Google sign-in. It does not share one person's memory with another.</li>
+          </ol>
+        </article>
+      </section>
+    <footer><svg viewBox="0 0 48 48" aria-hidden="true" fill="currentColor"><path d="M24 2l3.2 14.1L38.6 7.4l-6.2 12.4L46 24l-13.6 4.2 6.2 12.4-11.4-8.7L24 46l-3.2-14.1-11.4 8.7 6.2-12.4L2 24l13.6-4.2L9.4 7.4l11.4 8.7z"/></svg><span>Data from Jolpica, refreshed every Monday. Answers by Claude. A proof of concept.</span></footer>
+    </main>
+    <script src="config.js"></script>
+    <script src="render.js"></script>
+    <script src="ask.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
