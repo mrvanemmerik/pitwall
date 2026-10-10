@@ -16,7 +16,7 @@ jmespath==1.1.0
 pycparser==3.11
 pydantic==2.14.0
 pydantic_core==2.50.0
-PyJWT==2.10.1
+PyJWT==2.15.1
 python-dateutil==2.9.0.post0
 s3transfer==0.19.2
 six==1.17.0
