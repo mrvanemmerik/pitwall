@@ -3,8 +3,8 @@
 #
 #   scripts/ship.sh ask|ingest|read|site|all [--dry-run] [--skip-tests]
 #
-# Lambdas are rebuilt from the repo plus pinned-by-name dependencies built for Lambda
-# (Linux x86_64, Python 3.12). The site keeps the LIVE config.js (the repo's has placeholders).
+# Lambdas are rebuilt from the repo plus the pinned dependencies in requirements/ (built for Lambda
+# (Linux x86_64, Python 3.12)). The site keeps the LIVE config.js (the repo's has placeholders).
 # Settings come from the environment or scripts/ship.local.env (git-ignored; see ship.local.env.example):
 #   AWS_PROFILE, AWS_REGION (default us-east-2), PITWALL_APP_ID (Amplify app), PITWALL_SITE_URL
 # --dry-run builds everything and prints sizes but changes nothing in AWS.
@@ -48,7 +48,7 @@ package() { # name, then pip requirements
   mkdir -p "$dir/f1board"
   if [ "$#" -gt 0 ]; then
     python3 -m pip install --quiet --target "$dir" --platform manylinux2014_x86_64 \
-      --implementation cp --python-version 3.12 --only-binary=:all: --upgrade "$@" 2>&1 | grep -E "^ERROR: (Could not|No matching|Failed|Cannot)" && { echo "dependency install failed" >&2; exit 1; } || true
+      --implementation cp --python-version 3.12 --only-binary=:all: "$@" 2>&1 | grep -E "^ERROR: (Could not|No matching|Failed|Cannot)" && { echo "dependency install failed" >&2; exit 1; } || true
   fi
   cp f1board/*.py "$dir/f1board/"
   (cd "$dir" && find . -name __pycache__ -prune -exec rm -rf {} + && rm -rf bin && zip -q -r "$BUILD/$name.zip" . -x '*.DS_Store')
@@ -87,7 +87,7 @@ ship_site() {
   [ "$status" = SUCCEED ]
 }
 
-case "$TARGET" in ask|all) package ask PyJWT cryptography anthropic boto3; deploy_lambda f1-whiteboard-ask ask ;; esac
-case "$TARGET" in ingest|all) package ingest anthropic; deploy_lambda f1-whiteboard-ingest ingest ;; esac
+case "$TARGET" in ask|all) package ask -r requirements/ask.txt; deploy_lambda f1-whiteboard-ask ask ;; esac
+case "$TARGET" in ingest|all) package ingest -r requirements/ingest.txt; deploy_lambda f1-whiteboard-ingest ingest ;; esac
 case "$TARGET" in read|all) package read; deploy_lambda f1-whiteboard-read read ;; esac
 case "$TARGET" in site|all) ship_site ;; esac

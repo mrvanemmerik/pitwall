@@ -130,7 +130,7 @@ test("renderAnswer turns markdown into safe lists, tables and links", () => {
   assert.match(html, /<th class="num">Pos<\/th><th>Driver<\/th>/);
   assert.match(html, /<td class="num">1<\/td><td><strong>Max<\/strong><\/td>/);
   assert.match(html, /<ul><li>one<\/li><li>two<\/li><\/ul>/);
-  assert.match(html, /<a href="https:\/\/espn.com\/f1" target="_blank" rel="noopener noreferrer nofollow">ESPN<\/a>/);
+  assert.match(html, /<a href="https:\/\/espn.com\/f1" target="_blank" rel="noopener noreferrer nofollow">ESPN<\/a> <span class="link-host">\(espn.com\)<\/span>/);
 });
 
 test("renderAnswer escapes html and refuses non-https links", () => {
@@ -176,4 +176,11 @@ test("accessMessage only offers a request when there is none yet", () => {
   for (const status of ["pending", "denied", "approved", "checking"]) assert.equal(ask.accessMessage(status).canRequest, false);
   assert.match(ask.accessMessage("pending").text, /approved/);
   assert.equal(ask.accessMessage("approved").text, "");
+});
+
+
+test("a link shows its real host unless the link text already names it", () => {
+  assert.match(ask.renderAnswer("[Official F1 results](https://www.formula1.com/en/results)"), /<span class="link-host">\(www\.formula1\.com\)<\/span>/);
+  assert.doesNotMatch(ask.renderAnswer("[formula1.com](https://www.formula1.com/en/results)"), /link-host/);
+  assert.match(ask.renderAnswer("[your bank](https://evil.example.net/login?a=1&b=2)"), /\(evil\.example\.net\)/);
 });

@@ -1,5 +1,7 @@
 import json
 
+from datetime import datetime, timedelta, timezone
+
 from botocore.exceptions import ClientError
 
 from f1board import access
@@ -58,11 +60,11 @@ def test_fixed_lists_always_win_and_others_start_with_none(monkeypatch):
 def test_a_request_is_stored_once_and_the_owner_is_told_once(monkeypatch):
     gate(monkeypatch)
     table, sent = AccessTable(), []
-    notify = lambda email, name: sent.append((email, name))
+    notify = lambda email, name, pending=None: sent.append((email, name))
     assert access.request_access(table, claims("Pat@Example.com"), notify) == "pending"
     assert access.request_access(table, claims("pat@example.com"), notify) == "pending"
     assert sent == [("pat@example.com", "Pat Tester")]
-    assert len(table.items) == 1
+    assert len([key for key in table.items if key[0] == access.INDEX]) == 1
 
 
 def test_an_unverified_email_cannot_request_access(monkeypatch):
@@ -78,7 +80,7 @@ def test_a_failed_notification_does_not_lose_the_request(monkeypatch, capsys):
     gate(monkeypatch)
     table = AccessTable()
 
-    def broken(email, name):
+    def broken(email, name, pending=None):
         raise RuntimeError("sns down")
 
     assert access.request_access(table, claims("pat@example.com"), broken) == "pending"
@@ -195,3 +197,55 @@ def test_without_any_lists_the_chat_is_open_as_before(monkeypatch):
     gate(monkeypatch, allowed=None, admins=None)
     wire(monkeypatch, AccessTable())
     assert ask_handler(event("/", claims("anyone@example.com", verified=None), {"question": "Who leads?"}), None)["statusCode"] == 200
+
+
+T0 = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+
+
+def test_the_owner_gets_one_email_per_window_however_many_people_ask(monkeypatch):
+    gate(monkeypatch)
+    table, sent = AccessTable(), []
+    notify = lambda email, name, pending=None: sent.append((email, pending))
+    access.request_access(table, claims("a@example.com"), notify, now=T0)
+    access.request_access(table, claims("b@example.com"), notify, now=T0 + timedelta(minutes=3))
+    access.request_access(table, claims("c@example.com"), notify, now=T0 + timedelta(minutes=14))
+    assert sent == [("a@example.com", 1)]
+    access.request_access(table, claims("d@example.com"), notify, now=T0 + timedelta(minutes=16))
+    assert sent == [("a@example.com", 1), ("d@example.com", 4)]
+
+
+def test_requests_stop_at_the_pending_cap_and_resume_when_one_is_cleared(monkeypatch):
+    gate(monkeypatch)
+    monkeypatch.setattr(access, "MAX_PENDING", 2)
+    table = AccessTable()
+    access.request_access(table, claims("a@example.com"))
+    access.request_access(table, claims("b@example.com"))
+    try:
+        access.request_access(table, claims("c@example.com"))
+    except access.TooManyRequests:
+        pass
+    else:
+        raise AssertionError("expected TooManyRequests")
+    assert access.status_of(table, "c@example.com") == "none"
+    access.decide(table, claims("owner@example.com"), "a@example.com", "deny")
+    assert access.request_access(table, claims("c@example.com")) == "pending"
+
+
+def test_pending_and_denied_entries_expire_but_approved_ones_do_not(monkeypatch):
+    gate(monkeypatch)
+    table = AccessTable()
+    access.request_access(table, claims("a@example.com"), now=T0)
+    pending = table.items[(access.INDEX, "a@example.com")]
+    assert pending["expiresAt"] == int(T0.timestamp()) + 90 * 86400
+    access.decide(table, claims("owner@example.com"), "a@example.com", "approve", now=T0)
+    assert "expiresAt" not in table.items[(access.INDEX, "a@example.com")]
+    access.decide(table, claims("owner@example.com"), "a@example.com", "deny", now=T0)
+    assert table.items[(access.INDEX, "a@example.com")]["expiresAt"] == int(T0.timestamp()) + 90 * 86400
+
+
+def test_a_full_queue_is_a_429_through_the_handler(monkeypatch):
+    gate(monkeypatch)
+    monkeypatch.setattr(access, "MAX_PENDING", 0)
+    wire(monkeypatch, AccessTable())
+    response = ask_handler(event("/access/request", claims("pat@example.com")), None)
+    assert response["statusCode"] == 429

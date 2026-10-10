@@ -1,0 +1,27 @@
+# Pinned for the Lambda runtime (Linux x86_64, Python 3.12). Regenerate deliberately; Dependabot proposes bumps.
+annotated-types==0.8.0
+anthropic==1.13.0
+anyio==4.15.1
+boto3==1.43.111
+botocore==1.43.111
+cffi==2.1.1
+cryptography==50.0.2
+docstring_parser==0.18.0
+h11==0.16.0
+httpcore2==2.13.1
+httpx2==2.13.1
+idna==3.20
+jiter==0.17.0
+jmespath==1.1.0
+pycparser==3.11
+pydantic==2.14.0
+pydantic_core==2.50.0
+PyJWT==2.10.1
+python-dateutil==2.9.0.post0
+s3transfer==0.19.2
+six==1.17.0
+sniffio==1.3.1
+truststore==0.10.4
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+urllib3==2.8.0

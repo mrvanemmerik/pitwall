@@ -329,3 +329,5 @@ footer svg { width: 0.9rem; height: 0.9rem; color: var(--accent); }
 .admin-status.denied { color: var(--down); }
 .admin-empty { padding: 0.4rem 0; }
 #admin-add input { flex: 1 1 16rem; width: auto; }
+
+.link-host { color: var(--muted); font-size: 0.85em; }

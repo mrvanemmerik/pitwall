@@ -158,7 +158,11 @@ function escapeAnswer(text) {
 
 function inlineMarkdown(text) {
   return escapeAnswer(text)
-    .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer nofollow">$1</a>')
+    .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, (match, label, url) => {
+      const host = (/^https:\/\/([^\/?#:\s]+)/.exec(url) || [])[1] || "";
+      const shown = host && !label.toLowerCase().includes(host.toLowerCase().replace(/^www\./, "")) ? ` <span class="link-host">(${host})</span>` : "";
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>${shown}`;
+    })
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/__([^_]+)__/g, "<strong>$1</strong>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");

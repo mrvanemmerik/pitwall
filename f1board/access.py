@@ -6,8 +6,16 @@ from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
 INDEX = "access#index"
+META = "access#meta"
+MAX_PENDING = 25
+NOTICE_WINDOW_SECONDS = 15 * 60
+REQUEST_TTL_DAYS = 90
 EMAIL = re.compile(r"^[^@\s,]{1,64}@[^@\s,]{1,200}\.[^@\s,]{2,}$")
 DECISIONS = {"approve": "approved", "deny": "denied"}
+
+
+class TooManyRequests(Exception):
+    pass
 
 
 def _listed(name):
@@ -61,6 +69,24 @@ def _now(now=None):
     return (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _epoch(now=None, days=0, seconds=0):
+    moment = now or datetime.now(timezone.utc)
+    return int(moment.timestamp()) + days * 86400 + seconds
+
+
+def _notice_due(table, now=None):
+    """At most one email per window, so a flood of requests cannot flood the owner's inbox."""
+    stamp = _epoch(now)
+    try:
+        last = table.get_item(Key={"user": META, "day": "last-notice"}).get("Item") or {}
+        if stamp - int(last.get("at", 0)) < NOTICE_WINDOW_SECONDS:
+            return False
+        table.put_item(Item={"user": META, "day": "last-notice", "at": stamp, "expiresAt": stamp + 86400})
+    except ClientError:
+        return False
+    return True
+
+
 def request_access(table, claims, notify=None, now=None):
     """Record one pending request per verified email and tell the owner once."""
     email = verified_email(claims)
@@ -70,9 +96,12 @@ def request_access(table, claims, notify=None, now=None):
     if current != "none":
         return current
     name = " ".join(str(claims.get("name") or "").split())[:80]
+    pending = sum(1 for row in list_requests(table) if row["status"] == "pending")
+    if pending >= MAX_PENDING:
+        raise TooManyRequests("too many pending requests")
     try:
         table.put_item(
-            Item={"user": INDEX, "day": email, "status": "pending", "name": name, "requestedAt": _now(now)},
+            Item={"user": INDEX, "day": email, "status": "pending", "name": name, "requestedAt": _now(now), "expiresAt": _epoch(now, days=REQUEST_TTL_DAYS)},
             ConditionExpression="attribute_not_exists(#u)",
             ExpressionAttributeNames={"#u": "user"},
         )
@@ -80,9 +109,9 @@ def request_access(table, claims, notify=None, now=None):
         if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
             return status_of(table, email)
         raise
-    if notify:
+    if notify and _notice_due(table, now):
         try:
-            notify(email, name)
+            notify(email, name, pending + 1)
         except Exception as exc:
             print(json.dumps({"access_notify_error": type(exc).__name__}))
     return "pending"
@@ -128,19 +157,22 @@ def decide(table, admin_claims, email, decision, now=None):
         "decidedAt": _now(now),
         "decidedBy": verified_email(admin_claims),
     }
+    if decision == "deny":
+        item["expiresAt"] = _epoch(now, days=REQUEST_TTL_DAYS)  # approved entries never expire
     table.put_item(Item=item)
     return item
 
 
 def sns_notifier(topic_arn, site_url):
-    def notify(email, name):
+    def notify(email, name, pending=None):
         import boto3
 
         who = f"{name} <{email}>" if name else email
+        more = f" {pending} request(s) are waiting." if pending and pending > 1 else ""
         boto3.client("sns").publish(
             TopicArn=topic_arn,
             Subject="Pit Wall: new access request",
-            Message=f"{who} asked for chat access to Pit Wall.\n\n" + (f"Sign in at {site_url} and approve" if site_url else "Sign in and approve") + " or deny the request in the Access requests panel.",
+            Message=f"{who} asked for chat access to Pit Wall.{more}\n\n" + (f"Sign in at {site_url} and approve" if site_url else "Sign in and approve") + " or deny in the Access requests panel. You get at most one of these emails every 15 minutes.",
         )
 
     return notify

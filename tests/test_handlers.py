@@ -905,3 +905,55 @@ def test_without_an_allowlist_any_signed_in_user_may_ask(monkeypatch):
 def test_a_missing_sign_in_is_still_a_401_with_an_allowlist(monkeypatch):
     _guard(monkeypatch, "owner@example.com")
     assert ask_handler({"body": json.dumps({"question": "Who leads?"})}, None)["statusCode"] == 401
+
+
+
+def _refund_setup(monkeypatch, failure):
+    refunds = []
+    monkeypatch.setenv("TABLE_NAME", "f1-whiteboard")
+    monkeypatch.setenv("SEASON", "2026")
+    monkeypatch.setenv("CAP_TABLE", "f1-whiteboard-ask")
+    monkeypatch.delenv("ALLOWED_EMAILS", raising=False)
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    monkeypatch.setattr("f1board.ask_handler._cap_table", lambda: object())
+    monkeypatch.setattr("f1board.ask_handler.charge_question", lambda *a, **k: 1)
+    monkeypatch.setattr("f1board.ask_handler.refund_question", lambda *a, **k: refunds.append("refunded"))
+    monkeypatch.setattr("f1board.ask_handler.load_items", lambda *a: {
+        "drivers": {"rows": []}, "teams": {"rows": []}, "schedule": {"rows": []}, "results": {"rows": []}, "meta": {"updatedAt": "2026-10-10T14:35:38Z"},
+    })
+    monkeypatch.setattr("f1board.ask_handler.gather_web", lambda *a, **k: "")
+    monkeypatch.setattr("f1board.ask_handler.ask_model", lambda *a: (_ for _ in ()).throw(failure))
+    event = {"requestContext": {"authorizer": {"jwt": {"claims": {"sub": "refund-test"}}}}, "body": json.dumps({"question": "Who leads?"})}
+    return refunds, ask_handler(event, None)
+
+
+def test_a_question_is_not_handed_back_when_the_model_declined_or_said_nothing(monkeypatch):
+    from f1board.ask_handler import AnswerFailed
+
+    refunds, response = _refund_setup(monkeypatch, AnswerFailed("declined"))
+    assert response["statusCode"] == 502 and refunds == []
+
+
+def test_a_question_is_handed_back_when_something_else_failed(monkeypatch):
+    refunds, response = _refund_setup(monkeypatch, TimeoutError("anthropic unreachable"))
+    assert response["statusCode"] == 502 and refunds == ["refunded"]
+
+
+def test_counting_and_chat_rows_carry_an_expiry_for_dynamodb_ttl():
+    import time as _time
+    from f1board.ask_handler import charge_question, save_turns
+
+    seen = {}
+
+    class Table:
+        def update_item(self, **kwargs):
+            seen.update(kwargs)
+            return {"Attributes": {"questions": 1}}
+
+    now = int(_time.time())
+    charge_question(Table(), "user", "2026-10-10")
+    assert now + 2 * 86400 < seen["ExpressionAttributeValues"][":exp"] <= now + 3 * 86400 + 5
+    seen.clear()
+    save_turns(Table(), {"user": "u", "day": "chat#s"}, [{"q": "a", "a": "b"}])
+    assert now + 29 * 86400 < seen["ExpressionAttributeValues"][":exp"] <= now + 30 * 86400 + 5
+    assert "expiresAt" in seen["UpdateExpression"]

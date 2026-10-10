@@ -44,6 +44,7 @@ flowchart LR
 | `tests/` | Python tests |
 | `scripts/ship.sh` | Builds and deploys the Lambdas and the site |
 | `scripts/deploy.sh` | One-time resource creation (create-only; it fails if resources already exist) |
+| `requirements/` | Pinned Lambda dependencies (`ask.txt`, `ingest.txt`); Dependabot proposes bumps |
 | `scripts/amplify-headers.template.yml` | Content-Security-Policy and other headers for Amplify |
 
 ## Run the tests
@@ -92,17 +93,24 @@ The ingest Lambda needs `TABLE_NAME`, `SEASON`, `JOLPICA_BASE` and, for recaps, 
 scripts/ship.sh ask|ingest|read|site|all [--dry-run] [--skip-tests]
 ```
 
-`ship.sh` runs the tests, rebuilds each Lambda package from this repo plus its dependencies built for Lambda (Linux x86_64, Python 3.12), and deploys. The site deploy keeps the **live** `config.js`, because the one in the repo only has placeholders. `--dry-run` builds everything and changes nothing.
+`ship.sh` runs the tests, rebuilds each Lambda package from this repo plus the pinned dependencies in `requirements/` (built for Lambda: Linux x86_64, Python 3.12), and deploys. The site deploy keeps the **live** `config.js`, because the one in the repo only has placeholders. `--dry-run` builds everything and changes nothing.
 
 4. Apply the security headers from `scripts/amplify-headers.template.yml` (fill in your hosts) with `aws amplify update-app --custom-headers`, then redeploy the site.
 
 ## Security notes
 
-- The ask function URL has no AWS-level auth. All auth is in code: the Cognito ID token is verified (RS256, issuer, audience, token use) and the person must be approved.
+- The ask function URL has no AWS-level auth. All auth is in code: the Cognito ID token is verified (RS256, issuer, audience, token use; oversized or malformed tokens and unknown key ids are rejected without re-downloading keys) and the person must be approved. Restrict the function URL's CORS to your site's origin.
 - Chat access is limited by email allow-list and admin approval; each approved person is limited to a daily number of questions. Set a monthly spend limit on your Anthropic account as a backstop.
-- The site sends a strict Content-Security-Policy. Answers are rendered with an escaping-first Markdown renderer that only allows https links.
+- Access requests are capped (25 pending), one request per verified email, and the owner gets at most one notification email per 15 minutes.
+- A question is handed back only when something other than the model failed. A model refusal or an empty answer still counts.
+- The site sends a strict Content-Security-Policy. Answers are rendered with an escaping-first Markdown renderer that only allows https links and shows each link's real host.
 - Server-side URL fetching blocks non-https, non-443, private, loopback and link-local addresses and re-checks redirects.
 - Memory is scoped to the signed-in person. Text a visitor or a web page puts in a chat can end up in that person's own memory.
+- Dependencies are pinned in `requirements/`.
+
+## Data retention
+
+Enable DynamoDB TTL on the cap table with the attribute `expiresAt`. Daily counts expire after 3 days, chat history after 30 days, and pending or denied access requests after 90 days; approved entries are kept. AgentCore Memory keeps raw events for 30 days, but the long-term records it extracts stay until deleted.
 
 ## Costs and limits
 

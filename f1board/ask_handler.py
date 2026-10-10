@@ -22,6 +22,7 @@ HEADERS = {"content-type": "application/json"}
 DAILY_LIMIT = 30
 CLAUDE_MODEL = "claude-sonnet-5-5"
 HISTORY_TURNS = 6
+CHAT_TTL_DAYS = 30
 WEB_TOOLS = [
     {"type": "web_search_20250305", "name": "web_search", "max_uses": 3},
     {"type": "web_fetch_20250910", "name": "web_fetch", "max_uses": 3},
@@ -34,13 +35,17 @@ class CapReached(Exception):
     pass
 
 
+class AnswerFailed(RuntimeError):
+    """The model was called but gave no usable answer. The question is not handed back."""
+
+
 def charge_question(table, user, day, limit=DAILY_LIMIT):
     try:
         response = table.update_item(
             Key={"user": user, "day": day},
-            UpdateExpression="ADD questions :one",
+            UpdateExpression="SET expiresAt = :exp ADD questions :one",
             ConditionExpression="attribute_not_exists(questions) OR questions < :limit",
-            ExpressionAttributeValues={":one": 1, ":limit": limit},
+            ExpressionAttributeValues={":one": 1, ":limit": limit, ":exp": int(time.time()) + 3 * 86400},
             ReturnValues="UPDATED_NEW",
         )
     except ClientError as exc:
@@ -145,7 +150,11 @@ def load_turns(table, key):
 
 def save_turns(table, key, turns):
     try:
-        table.update_item(Key=key, UpdateExpression="SET turns = :turns", ExpressionAttributeValues={":turns": turns})
+        table.update_item(
+            Key=key,
+            UpdateExpression="SET turns = :turns, expiresAt = :exp",
+            ExpressionAttributeValues={":turns": turns, ":exp": int(time.time()) + CHAT_TTL_DAYS * 86400},
+        )
     except ClientError:
         pass
 
@@ -205,10 +214,10 @@ def invoke_claude(table, question, message, session_id, actor_id):
     used = sum(1 for block in response.content if getattr(block, "type", "") == "server_tool_use")
     print(json.dumps({"model": getattr(response, "model", None), "web_tools": web, "web_calls": used, "web_errors": _tool_errors(response), "stop": response.stop_reason}))
     if response.stop_reason == "refusal":
-        raise RuntimeError("declined")
+        raise AnswerFailed("declined")
     answer = "".join(block.text for block in response.content if block.type == "text").strip()
     if not answer:
-        raise RuntimeError("empty answer")
+        raise AnswerFailed("empty answer")
     save_turns(table, key, (turns + [{"q": question, "a": answer[:1500]}])[-HISTORY_TURNS:])
     memory.record(actor_id, session_id, question, answer)
     return answer
@@ -292,6 +301,8 @@ def _access_route(path, event, claims, table):
             return _response(200, {"status": access.request_access(table, claims, _notifier())})
         except ValueError:
             return _response(400, {"error": "Google has not verified your email address."})
+        except access.TooManyRequests:
+            return _response(429, {"error": "Too many access requests are waiting right now. Try again later."})
     if not access.is_admin(claims):
         return _response(403, {"error": "admins only"})
     if path == "/admin/decide":
@@ -336,6 +347,8 @@ def handler(event, context):
             runtime_session(sub, session_id),
             sub,
         )
+    except AnswerFailed:
+        return _response(502, {"error": "could not ask the garage"})
     except Exception:
         refund_question(table, sub, day)
         return _response(502, {"error": "could not ask the garage"})
