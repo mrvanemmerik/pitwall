@@ -12,7 +12,7 @@ from botocore.eventstream import EventStreamBuffer
 from botocore.exceptions import ClientError
 from botocore.session import Session
 
-from f1board import access, memory
+from f1board import access, memory, refresh
 from f1board.season_tool import GARAGE_SYSTEM, grounded_message
 from f1board.web_fetch import gather_web
 from f1board.season_view import SeasonIncomplete, season_view
@@ -305,6 +305,8 @@ def _access_route(path, event, claims, table):
             return _response(429, {"error": "Too many access requests are waiting right now. Try again later."})
     if not access.is_admin(claims):
         return _response(403, {"error": "admins only"})
+    if path == "/admin/refresh":
+        return _refresh_route(table)
     if path == "/admin/decide":
         body = _json_body(event)
         try:
@@ -314,12 +316,26 @@ def _access_route(path, event, claims, table):
     return _response(200, {"requests": access.list_requests(table)})
 
 
+def _refresh_route(table):
+    function_name = os.environ.get("INGEST_FUNCTION")
+    if not function_name:
+        return _response(503, {"error": "refresh is not set up"})
+    try:
+        refresh.start(table, _lambda_client(), function_name)
+    except refresh.TooSoon as exc:
+        return _response(429, {"error": "a refresh ran a moment ago", "retryAfter": exc.retry_after})
+    except Exception as exc:
+        print(json.dumps({"refresh_error": type(exc).__name__, "detail": str(exc)[:200]}))
+        return _response(502, {"error": "could not start the refresh"})
+    return _response(202, {"started": True})
+
+
 def handler(event, context):
     sub, name, claims = caller(event)
     if not sub:
         return _response(401, {"error": "sign in again"})
     path = _path(event)
-    if path in {"/access/status", "/access/request", "/admin/requests", "/admin/decide"}:
+    if path in {"/access/status", "/access/request", "/admin/requests", "/admin/decide", "/admin/refresh"}:
         return _access_route(path, event, claims, _cap_table())
     try:
         question, session_id = question_from(event)
@@ -356,6 +372,12 @@ def handler(event, context):
     if isinstance(used, int):
         body["remaining"] = max(limit - used, 0)
     return _response(200, body)
+
+
+def _lambda_client():
+    import boto3
+
+    return boto3.client("lambda")
 
 
 def _cap_table():
