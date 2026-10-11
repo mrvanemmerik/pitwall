@@ -85,8 +85,24 @@ def parse_schedule(payload):
         }
         if race.get("time"):
             row["time"] = race["time"]
+        sessions = _sessions(race)
+        if sessions:
+            row["sessions"] = sessions
         rows.append(row)
     return rows
+
+
+# Jolpica key -> label shown on the board. Practice is left out on purpose.
+SESSIONS = {"SprintQualifying": "Sprint qualifying", "SprintShootout": "Sprint qualifying", "Sprint": "Sprint", "Qualifying": "Qualifying"}
+
+
+def _sessions(race):
+    found = []
+    for key, name in SESSIONS.items():
+        session = race.get(key) or {}
+        if session.get("date") and session.get("time"):
+            found.append({"name": name, "date": session["date"], "time": session["time"]})
+    return sorted(found, key=lambda row: (row["date"], row["time"]))
 
 
 def parse_results(results_payload, sprint_payload):

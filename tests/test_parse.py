@@ -181,3 +181,37 @@ def test_results_keep_top_10_and_attach_sprint():
 def test_missing_standings_list_is_partial():
     with pytest.raises(PartialSeason):
         parse_driver_standings({"MRData": {"StandingsTable": {"StandingsLists": []}}})
+
+
+def test_schedule_keeps_weekend_session_times_in_order():
+    races = {
+        "MRData": {
+            "RaceTable": {
+                "Races": [
+                    {
+                        "round": "17",
+                        "raceName": "Singapore Grand Prix",
+                        "date": "2026-10-11",
+                        "time": "12:00:00Z",
+                        "Circuit": {"circuitName": "Marina Bay"},
+                        "FirstPractice": {"date": "2026-10-09", "time": "08:30:00Z"},
+                        "Qualifying": {"date": "2026-10-10", "time": "13:00:00Z"},
+                        "Sprint": {"date": "2026-10-10", "time": "09:00:00Z"},
+                        "SprintQualifying": {"date": "2026-10-09", "time": "12:30:00Z"},
+                    }
+                ]
+            }
+        }
+    }
+    row = parse_schedule(races)[0]
+    assert row["sessions"] == [
+        {"name": "Sprint qualifying", "date": "2026-10-09", "time": "12:30:00Z"},
+        {"name": "Sprint", "date": "2026-10-10", "time": "09:00:00Z"},
+        {"name": "Qualifying", "date": "2026-10-10", "time": "13:00:00Z"},
+    ]
+
+
+def test_schedule_skips_sessions_without_a_time():
+    rows = parse_schedule(RACES)
+    assert "sessions" not in rows[0]
+    assert "sessions" not in rows[1]
