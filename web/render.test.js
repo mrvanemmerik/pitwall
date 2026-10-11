@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { daysUntil, formatUpdated, localTimeLabel, positionChanges, renderError, renderSeason, teamColor } = require("./render.js");
+const { calendarFile, countdownLabel, daysUntil, formatUpdated, refreshOutcome, localTimeLabel, positionChanges, renderError, renderSeason, teamColor } = require("./render.js");
 
 const season = {
   updatedAt: "2026-10-10T18:00:00Z",
@@ -111,8 +111,8 @@ test("driver rows show points from the latest round", () => {
   assert.match(html, /R1 points/);
   assert.match(html, /Kimi Antonelli[\s\S]*<span class="gain">\+25<\/span>/);
   assert.match(html, /Lewis Hamilton[\s\S]*<span class="gain">\+0<\/span>/);
-  assert.match(html, />1 win</);
-  assert.match(html, />6 wins</);
+  assert.match(html, />1<span class="unit"> win<\/span></);
+  assert.match(html, />6<span class="unit"> wins<\/span></);
 });
 
 test("error copy is fixed", () => {
@@ -160,7 +160,7 @@ test("race day and the countdown read plainly", () => {
   assert.equal(daysUntil("2026-03-29", "2026-03-30"), "");
   const raceDay = renderSeason(waiting, { today: "2026-03-29" });
   assert.match(raceDay, /Race day/);
-  assert.match(renderSeason(waiting, { today: "2026-03-26" }), /Suzuka · 29 Mar 2026[^<]*<time[^>]*>05:00 UTC<\/time>[^<]*in 3 days/);
+  assert.match(renderSeason(waiting, { today: "2026-03-26" }), /Suzuka · 29 Mar 2026[^<]*<time[^>]*>05:00 UTC<\/time>[^<]*<span class="countdown" data-start="2026-03-29T05:00:00Z">in 3 days<\/span>/);
 });
 
 test("a start time is machine readable so the browser can localise it", () => {
@@ -277,4 +277,93 @@ test("a qualifying recap shows for the next round until its race has results", (
   assert.ok(html.indexOf('data-recap-kind="qualifying"') < html.indexOf('data-recap-kind="race"'));
   const afterRace = renderSeason({ ...season, recaps: [{ round: latest, kind: "qualifying", name: "Done Grand Prix", text: "Stale quali." }] }, { today: "2026-03-10" });
   assert.doesNotMatch(afterRace, /data-recap/);
+});
+
+test("standings show the gap to the leader", () => {
+  const html = renderSeason(season, { today: "2026-03-10" });
+  const drivers = html.split("<h2>Drivers</h2>")[1].split("</section>")[0];
+  assert.match(drivers, /<span class="gap">Gap<\/span>/);
+  assert.match(drivers, /Kimi Antonelli.*?<span class="gap">—<\/span>/);
+  assert.match(drivers, /Lewis Hamilton.*?<span class="gap">−106<\/span>/);
+  const teams = html.split("<h2>Teams</h2>")[1];
+  assert.match(teams, /<span class="gap">—<\/span>/);
+});
+
+test("a driver level on points with the leader reads level", () => {
+  const tied = { ...season, drivers: [season.drivers[0], { ...season.drivers[1], points: 320 }] };
+  assert.match(renderSeason(tied, { today: "2026-03-10" }), /<span class="gap">level<\/span>/);
+});
+
+test("countdown counts hours and minutes inside two days", () => {
+  const start = "2026-10-11T12:00:00Z";
+  const at = (h, m) => Date.UTC(2026, 9, 11, h, m);
+  assert.equal(countdownLabel(start, at(7, 48)), "in 4h 12m");
+  assert.equal(countdownLabel(start, at(11, 18)), "in 42m");
+  assert.equal(countdownLabel(start, at(11, 59) + 30000), "in 1m");
+  assert.equal(countdownLabel(start, at(13, 0)), "racing now");
+  assert.equal(countdownLabel(start, at(16, 0)), "finished");
+  assert.equal(countdownLabel(start, Date.UTC(2026, 9, 8, 12, 0)), null);
+  assert.equal(countdownLabel("not a date", at(0, 0)), null);
+});
+
+const weekend = {
+  ...season,
+  schedule: [
+    { round: 1, name: "Australian Grand Prix", circuit: "Albert Park", date: "2026-03-08", hasSprint: true },
+    {
+      round: 2,
+      name: "Chinese Grand Prix",
+      circuit: "Shanghai",
+      date: "2026-03-15",
+      time: "07:00:00Z",
+      hasSprint: true,
+      sessions: [
+        { name: "Sprint qualifying", date: "2026-03-13", time: "07:30:00Z" },
+        { name: "Sprint", date: "2026-03-14", time: "03:00:00Z" },
+        { name: "Qualifying", date: "2026-03-14", time: "07:00:00Z" },
+      ],
+    },
+  ],
+};
+
+test("next round lists its sessions, a countdown and a calendar button", () => {
+  const pin = renderSeason(weekend, { today: "2026-03-10" }).split('data-next-round="2"')[1].split("</section>")[0];
+  assert.match(pin, /<ul class="sessions">/);
+  assert.match(pin, /Sprint qualifying<\/span> <time class="start" datetime="2026-03-13T07:30:00Z">07:30 UTC<\/time>/);
+  assert.match(pin, /Race<\/span> <time class="start" datetime="2026-03-15T07:00:00Z">/);
+  assert.match(pin, /<span class="countdown" data-start="2026-03-15T07:00:00Z">in 5 days<\/span>/);
+  assert.match(pin, /<button type="button" class="add-calendar" data-round="2">Add to calendar<\/button>/);
+});
+
+test("older rows without times get no sessions, countdown or calendar button", () => {
+  const html = renderSeason(season, { today: "2026-03-10" });
+  assert.match(html, /in 5 days/);
+  assert.doesNotMatch(html, /class="sessions"|class="countdown"|add-calendar/);
+});
+
+test("the last round of a finished season offers no calendar button", () => {
+  const done = { ...weekend, results: [...weekend.results, { round: 2, name: "Chinese Grand Prix", hasSprint: false, grandPrix: [], sprint: [] }] };
+  assert.doesNotMatch(renderSeason(done, { today: "2026-03-20" }), /add-calendar|class="sessions"/);
+});
+
+test("calendar file has one event per session in UTC", () => {
+  const text = calendarFile(weekend.schedule[1], Date.UTC(2026, 2, 10, 9, 0, 0));
+  const lines = text.split("\r\n");
+  assert.equal(lines[0], "BEGIN:VCALENDAR");
+  assert.equal(lines.filter((line) => line === "BEGIN:VEVENT").length, 4);
+  assert.ok(lines.includes("UID:pitwall-2026-r2-sprint-qualifying@pitwall"));
+  assert.ok(lines.includes("DTSTART:20260315T070000Z"));
+  assert.ok(lines.includes("DTEND:20260315T090000Z"));
+  assert.ok(lines.includes("DTEND:20260314T080000Z"));
+  assert.ok(lines.includes("SUMMARY:Chinese Grand Prix: Sprint"));
+  assert.ok(lines.includes("DTSTAMP:20260310T090000Z"));
+  assert.ok(text.endsWith("END:VCALENDAR\r\n"));
+});
+
+test("a refresh says which results are new, or that none arrived", () => {
+  const before = { updatedAt: "2026-10-10T22:00:00Z", results: [{ round: 16, name: "Bahrain Grand Prix in Malaysia" }] };
+  const same = { ...before, updatedAt: "2026-10-11T15:04:00Z" };
+  assert.equal(refreshOutcome(before, same), "Refreshed 11 Oct 2026, 3:04 pm UTC. No new results from Jolpica yet.");
+  const newer = { ...same, results: [...before.results, { round: 17, name: "Singapore Grand Prix" }] };
+  assert.equal(refreshOutcome(before, newer), "Refreshed 11 Oct 2026, 3:04 pm UTC. New results: R17 Singapore Grand Prix.");
 });

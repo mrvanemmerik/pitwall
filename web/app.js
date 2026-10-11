@@ -5,13 +5,94 @@ function localizeTimes(root) {
   });
 }
 
+let season = null;
+
+function tickCountdowns(root) {
+  root.querySelectorAll(".countdown[data-start]").forEach((node) => {
+    const label = window.countdownLabel(node.dataset.start, Date.now());
+    if (label) node.textContent = label;
+  });
+}
+
+function saveCalendar(roundNumber) {
+  const round = ((season && season.schedule) || []).find((row) => Number(row.round) === Number(roundNumber));
+  if (!round) return;
+  const blob = new Blob([window.calendarFile(round, Date.now())], { type: "text/calendar" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `pit-wall-r${round.round}.ics`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function drawBoard(root, data) {
+  season = data;
+  root.innerHTML = window.renderSeason(data);
+  localizeTimes(root);
+  tickCountdowns(root);
+  const updated = document.querySelector("#admin-updated");
+  if (updated) updated.textContent = window.formatUpdated(data.updatedAt);
+}
+
+const REFRESH_POLL_MS = 10000;
+const REFRESH_POLL_TRIES = 18;
+
+async function waitForRefresh(before) {
+  for (let tries = 0; tries < REFRESH_POLL_TRIES; tries += 1) {
+    await new Promise((resolve) => setTimeout(resolve, REFRESH_POLL_MS));
+    try {
+      const response = await window.fetch(window.SEASON_API, { cache: "reload" });
+      if (!response.ok) continue;
+      const data = await response.json();
+      if (data.updatedAt !== before.updatedAt) return data;
+    } catch (error) {
+      /* a dropped poll just waits for the next one */
+    }
+  }
+  return null;
+}
+
+async function refreshNow() {
+  const button = document.querySelector("#admin-refresh");
+  const note = document.querySelector("#refresh-note");
+  const token = sessionStorage.getItem("f1-id-token");
+  if (!token || !season) return;
+  const before = season;
+  button.disabled = true;
+  note.textContent = "Starting the refresh\u2026";
+  try {
+    const result = await callApi("/admin/refresh", token);
+    if (result.status === 429) {
+      const minutes = Math.max(1, Math.ceil(Number(result.data.retryAfter || 60) / 60));
+      note.textContent = `A refresh ran a moment ago. Try again in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`;
+      return;
+    }
+    if (!result.ok) {
+      note.textContent = result.status === 401 ? "Your sign-in expired. Sign in again to refresh." : "Could not start the refresh. Try again in a minute.";
+      return;
+    }
+    note.textContent = "Refresh started. The board updates in about a minute.";
+    const after = await waitForRefresh(before);
+    if (!after) {
+      note.textContent = "The refresh is taking longer than usual. Reload the page in a few minutes.";
+      return;
+    }
+    drawBoard(document.querySelector("#board"), after);
+    note.textContent = window.refreshOutcome(before, after);
+  } catch (error) {
+    note.textContent = "Could not start the refresh. Try again in a minute.";
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function loadBoard(root, url, fetchImpl) {
   try {
     const response = await fetchImpl(url);
     if (!response.ok) throw new Error("bad status");
-    const data = await response.json();
-    root.innerHTML = window.renderSeason(data);
-    localizeTimes(root);
+    drawBoard(root, await response.json());
   } catch (error) {
     root.innerHTML = window.renderError();
     const retry = root.querySelector(".retry");
@@ -27,11 +108,23 @@ function showTab(name) {
   board.hidden = !onBoard;
   if (ask) ask.hidden = !onBoard;
   how.hidden = name !== "how";
+  document.querySelector("#admin").hidden = name !== "admin";
   document.querySelectorAll("[data-tab]").forEach((tab) => {
     const on = tab.dataset.tab === name;
     tab.setAttribute("aria-selected", on ? "true" : "false");
     tab.tabIndex = on ? 0 : -1;
   });
+}
+
+function setAdmin(on) {
+  const tab = document.querySelector("#tab-admin");
+  tab.hidden = !on;
+  if (!on && tab.getAttribute("aria-selected") === "true") showTab("board");
+}
+
+function adminTabLabel(rows) {
+  const waiting = rows.filter((row) => row.status === "pending").length;
+  document.querySelector("#tab-admin").textContent = waiting ? `Admin (${waiting})` : "Admin";
 }
 
 let thread = [];
@@ -62,7 +155,7 @@ function applyAccess(status, admin) {
   document.querySelector("#access").hidden = approved;
   document.querySelector("#access-text").textContent = message.text;
   document.querySelector("#access-request").hidden = !message.canRequest;
-  document.querySelector("#admin").hidden = !admin;
+  setAdmin(admin);
 }
 
 async function loadAccess(token) {
@@ -102,6 +195,7 @@ async function requestAccess() {
 function renderRequests(rows) {
   const list = document.querySelector("#admin-list");
   list.replaceChildren();
+  adminTabLabel(rows);
   if (!rows.length) {
     const empty = document.createElement("li");
     empty.className = "admin-empty fine";
@@ -157,7 +251,7 @@ function showSignedIn(token) {
   document.querySelector("#ask-out").hidden = Boolean(token);
   document.querySelector("#ask-form").hidden = true;
   document.querySelector("#access").hidden = true;
-  document.querySelector("#admin").hidden = true;
+  setAdmin(false);
   const who = document.querySelector("#who");
   if (who) who.textContent = token ? window.garageAsk.displayName(token) : "";
   if (token) loadAccess(token);
@@ -369,13 +463,20 @@ function signOut() {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  loadBoard(document.querySelector("#board"), window.SEASON_API, window.fetch.bind(window));
-  const tabs = [...document.querySelectorAll("[data-tab]")];
-  tabs.forEach((tab, index) => {
+  const board = document.querySelector("#board");
+  loadBoard(board, window.SEASON_API, window.fetch.bind(window));
+  setInterval(() => tickCountdowns(board), 60000);
+  board.addEventListener("click", (event) => {
+    const button = event.target.closest(".add-calendar");
+    if (button) saveCalendar(button.dataset.round);
+  });
+  document.querySelectorAll("[data-tab]").forEach((tab) => {
     tab.addEventListener("click", () => showTab(tab.dataset.tab));
     tab.addEventListener("keydown", (event) => {
       if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
       event.preventDefault();
+      const tabs = [...document.querySelectorAll("[data-tab]")].filter((each) => !each.hidden);
+      const index = tabs.indexOf(tab);
       const next = event.key === "ArrowRight" ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
       tabs[next].focus();
       showTab(tabs[next].dataset.tab);
@@ -402,6 +503,7 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   });
   document.querySelector("#new-chat").addEventListener("click", newChat);
+  document.querySelector("#admin-refresh").addEventListener("click", refreshNow);
   syncNewChat();
   finishSignIn(window.fetch.bind(window)).then(showSignedIn).catch(() => {
     line("error", "sign in again");
