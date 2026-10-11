@@ -275,6 +275,7 @@ def test_read_returns_the_season_document(monkeypatch):
     assert body["updatedAt"] == "2026-10-10T18:00:00Z"
     assert body["drivers"] == [{"position": 1}]
     assert "source" not in body
+    assert response["headers"]["cache-control"] == "public, max-age=300"
 
 
 def test_season_tool_returns_the_same_document(monkeypatch):
@@ -459,6 +460,7 @@ def test_read_errors_when_an_item_is_missing(monkeypatch):
 
     assert response["statusCode"] == 500
     assert json.loads(response["body"]) == {"error": "season incomplete"}
+    assert response["headers"]["cache-control"] == "no-store"
 
 
 class _Body:
