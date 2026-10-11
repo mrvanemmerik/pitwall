@@ -28,7 +28,7 @@ flowchart LR
   INGEST --> CLAUDE
 ```
 
-1. **Refresh.** A scheduled Lambda (`f1board/ingest_handler.py`) pulls standings, schedule, race, sprint and qualifying data from Jolpica and writes the season to DynamoDB in one transaction. A failed fetch writes nothing. It runs Monday morning and again on Saturday and Sunday evenings, so qualifying and race recaps appear the same weekend.
+1. **Refresh.** A scheduled Lambda (`f1board/ingest_handler.py`) pulls standings, schedule, race, sprint and qualifying data from Jolpica and writes the season to DynamoDB in one transaction. A failed fetch writes nothing. It runs Saturday evening, Sunday afternoon and evening, and Monday morning, so qualifying and race recaps appear the same weekend. An admin can also start a run from the Admin tab (`POST /admin/refresh` on the ask function, at most once every five minutes).
 2. **Recaps.** After a refresh, `f1board/recap.py` makes at most one race recap (newest round with results) and one qualifying recap (a round whose qualifying is in but whose race is not). Each is written only when new, from the stored results alone, and a failure never fails the refresh.
 3. **Reading.** `GET /season` (`f1board/read_handler.py`) returns the stored season as JSON. The static page in `web/` fetches it and draws it. A past race with no stored results shows "Results pending" instead of "Ran".
 4. **Asking.** The page signs the visitor in with Google through Cognito (PKCE) and sends the ID token to a Lambda function URL (`f1board/ask_handler.py`). The Lambda checks the token, checks the visitor is approved, counts the question against a daily limit, builds a prompt from the stored season (plus a web lookup for results and news), and calls Claude. A question is charged before the model call and handed back if the season is incomplete.
@@ -78,7 +78,8 @@ The ask Lambda reads these environment variables.
 | `CLAUDE_MODEL` | Model id (default `claude-sonnet-5-5`) |
 | `AGENTCORE_MEMORY_ID` | AgentCore Memory resource; memory is off if unset |
 | `ALLOWED_EMAILS` | Comma-separated verified emails that may always chat |
-| `ADMIN_EMAILS` | Comma-separated verified emails that may approve or deny requests |
+| `ADMIN_EMAILS` | Comma-separated verified emails that may approve or deny requests and refresh the board |
+| `INGEST_FUNCTION` | Name of the ingest Lambda the Admin tab's Refresh now starts; the ask role needs `lambda:InvokeFunction` on it. Unset turns the button off |
 | `ACCESS_TOPIC_ARN`, `SITE_URL` | SNS topic that emails the owner about new requests; link used in that email |
 
 The ingest Lambda needs `TABLE_NAME`, `SEASON`, `JOLPICA_BASE` and, for recaps, `ANTHROPIC_SECRET_ID`.
